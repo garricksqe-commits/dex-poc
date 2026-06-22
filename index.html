@@ -2,184 +2,271 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DEX Shell — Distributed Execution POC</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tee Caddie</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#001d0e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Caddie">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root { color-scheme: light dark; --bg:#0b1220; --card:#131c2e; --line:#26334d; --accent:#2563eb; --ok:#1e7e34; --warn:#b8860b; --err:#c0392b; }
-  * { box-sizing: border-box; }
-  body { font:15px/1.45 system-ui,sans-serif; margin:0; background:var(--bg); color:#e8edf6; }
-  header { background:var(--accent); color:#fff; padding:14px 16px; font-weight:700; display:flex; justify-content:space-between; align-items:center; }
-  header small { opacity:.8; font-weight:400; }
-  main { max-width:760px; margin:0 auto; padding:16px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin:14px 0; }
-  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; opacity:.7; margin:0 0 10px; }
-  label { display:block; font-size:13px; margin:8px 0 2px; opacity:.85; }
-  input, select, button { font:inherit; padding:9px 10px; border-radius:8px; border:1px solid var(--line); background:#0e1626; color:#e8edf6; width:100%; }
-  button { background:var(--accent); border:0; color:#fff; font-weight:700; cursor:pointer; }
-  button.secondary { background:#26334d; }
-  .row { display:flex; gap:8px; flex-wrap:wrap; }
-  .row > * { flex:1; min-width:120px; }
-  .dev { display:flex; align-items:center; gap:8px; padding:8px 0; border-top:1px solid var(--line); }
-  .dot { width:10px; height:10px; border-radius:50%; background:#666; flex:none; }
-  .dot.on { background:var(--ok); box-shadow:0 0 8px var(--ok); }
-  .badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:700; }
-  .b-queued{background:#3b3b3b;color:#fff} .b-running{background:var(--warn);color:#fff} .b-done{background:var(--ok);color:#fff} .b-error{background:var(--err);color:#fff}
-  .cmd { border-top:1px solid var(--line); padding:8px 0; }
-  pre { background:#0a1120; border-radius:8px; padding:8px; overflow:auto; font-size:12px; margin:6px 0 0; white-space:pre-wrap; word-break:break-word; }
-  .muted { opacity:.6; font-size:12px; }
-  .hide { display:none; }
+  :root{
+    --primary:#001d0e; --on-primary:#fff; --primary-container:#133321; --on-primary-container:#7a9c84;
+    --secondary:#6a5e33; --secondary-container:#f3e2ac;
+    --surface:#f9f9f8; --sc-low:#f3f4f3; --sc:#edeeed; --sc-high:#e7e8e7; --sc-lowest:#fff;
+    --on-surface:#191c1c; --on-surface-variant:#424843; --outline:#727972; --outline-variant:#c2c8c1;
+    --danger:#b3261e; --ok:#1e7e34;
+    --headline:"Manrope",system-ui,sans-serif; --sans:"Inter",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:var(--sans);background:var(--surface);color:var(--on-surface);-webkit-font-smoothing:antialiased;padding-bottom:env(safe-area-inset-bottom)}
+  .wrap{max-width:520px;margin:0 auto;padding:0 20px}
+  header{position:sticky;top:0;z-index:30;background:rgba(249,249,248,.8);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}
+  header .bar{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;max-width:520px;margin:0 auto}
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--headline);font-weight:800;color:var(--primary);letter-spacing:-.02em}
+  .brand .dot{width:26px;height:26px;border-radius:7px;background:var(--primary);display:flex;align-items:center;justify-content:center}
+  .brand .dot svg{width:15px;height:15px}
+  .who{font-size:12px;color:var(--on-surface-variant)}
+  .who button{font:inherit;font-size:12px;background:none;border:0;color:var(--secondary);font-weight:700;cursor:pointer;padding:4px}
+  .eyebrow{font-size:10px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--secondary)}
+  h1.title{font-family:var(--headline);font-weight:800;font-size:40px;line-height:1;letter-spacing:-.03em;color:var(--primary);margin:8px 0 8px}
+  .sub{color:var(--on-surface-variant);font-size:15px;line-height:1.5;margin:0 0 8px}
+  .card{background:var(--sc-lowest);border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 1px 2px rgba(25,28,28,.04),0 8px 24px -16px rgba(25,28,28,.12)}
+  .card h3{font-family:var(--headline);font-weight:700;font-size:13px;letter-spacing:.02em;color:var(--primary);margin:0 0 14px;display:flex;align-items:center;gap:8px;text-transform:uppercase}
+  .card h3 .ic{color:var(--secondary);width:16px;height:16px}
+  label.fld{display:block;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--on-surface-variant);margin-bottom:6px}
+  input,select{font:inherit;width:100%;border:0;background:var(--sc-low);border-bottom:2px solid var(--primary);border-radius:8px 8px 0 0;padding:12px;color:var(--primary);font-family:var(--headline);font-weight:700;font-size:16px}
+  input:focus,select:focus{outline:none;background:var(--sc)}
+  .row{display:flex;gap:10px}.row>*{flex:1;min-width:0}
+  .seg{display:flex;background:var(--sc-low);border-radius:10px;padding:4px;gap:4px}
+  .seg button{flex:1;border:0;background:none;font:inherit;font-weight:700;font-size:14px;color:var(--on-surface-variant);padding:10px 6px;border-radius:7px;cursor:pointer}
+  .seg button.on{background:var(--sc-lowest);color:var(--primary);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .dev{display:flex;align-items:center;gap:10px;padding:12px;border-radius:12px;background:var(--sc-low);margin-bottom:8px;cursor:pointer;border:2px solid transparent}
+  .dev.sel{border-color:var(--primary);background:var(--sc)}
+  .dev .led{width:9px;height:9px;border-radius:50%;background:var(--outline-variant);flex:none}
+  .dev .led.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .dev .nm{font-family:var(--headline);font-weight:700;color:var(--primary);flex:1}
+  .dev .st{font-size:12px;color:var(--on-surface-variant)}
+  .live-toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px;border-radius:12px;background:var(--sc-low);margin-top:4px}
+  .live-toggle .lbl{font-size:13px;font-weight:600;color:var(--on-surface-variant)}
+  .live-toggle .lbl b{color:var(--danger)}
+  .sw{width:50px;height:30px;border-radius:16px;background:var(--outline-variant);position:relative;cursor:pointer;flex:none;transition:.2s}
+  .sw.on{background:var(--danger)}
+  .sw i{position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:.2s}
+  .sw.on i{left:23px}
+  .go{width:100%;border:0;border-radius:12px;padding:18px;font-family:var(--headline);font-weight:800;font-size:17px;color:var(--on-primary);background:var(--primary);cursor:pointer;letter-spacing:-.01em;display:flex;align-items:center;justify-content:center;gap:10px;transition:transform .1s,opacity .2s;margin-top:6px}
+  .go:active{transform:scale(.985)}
+  .go.live{background:var(--danger)}
+  .go:disabled{opacity:.5;cursor:not-allowed}
+  .status{margin-top:14px}
+  .stage{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;background:var(--primary-container);color:#dfeee5;font-weight:600;font-size:14px}
+  .spin{width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:sp 1s linear infinite;flex:none}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .result{padding:16px;border-radius:12px;font-size:14px}
+  .result.ok{background:#e9f6ee;border:1px solid #bfe6cd;color:#155e2e}
+  .result.err{background:#fdecea;border:1px solid #f5c6c2;color:#8c1d18}
+  .result h4{font-family:var(--headline);font-weight:800;margin:0 0 6px;font-size:18px}
+  .result .slot{font-family:var(--headline);font-weight:800;font-size:28px;letter-spacing:-.02em;color:var(--primary);margin:4px 0}
+  .muted{color:var(--on-surface-variant);font-size:12px}
+  .hide{display:none!important}
+  /* auth */
+  .auth{min-height:70vh;display:flex;flex-direction:column;justify-content:center}
+  .auth h1{font-family:var(--headline);font-weight:800;font-size:34px;color:var(--primary);letter-spacing:-.03em;margin:0 0 4px}
+  .auth p{color:var(--on-surface-variant);margin:0 0 20px}
+  .auth input{margin-bottom:10px}
+  .install-tip{font-size:12px;color:var(--on-surface-variant);text-align:center;margin-top:18px;line-height:1.5}
 </style>
 </head>
 <body>
-<header><span>DEX Shell <small>distributed execution</small></span><span id="who" class="muted"></span></header>
-<main>
+<header>
+  <div class="bar">
+    <div class="brand">
+      <span class="dot"><svg viewBox="0 0 24 24" fill="none"><path d="M7 3v18" stroke="#7a9c84" stroke-width="2" stroke-linecap="round"/><path d="M8 4l9 3-9 3z" fill="#f3e2ac"/></svg></span>
+      Tee&nbsp;Caddie
+    </div>
+    <div class="who" id="who"></div>
+  </div>
+</header>
+
+<main class="wrap">
 
   <!-- AUTH -->
-  <div class="card" id="auth-card">
-    <h2>Sign in</h2>
-    <label>Email</label><input id="email" type="email" autocomplete="username">
-    <label>Password</label><input id="pass" type="password" autocomplete="current-password">
-    <div style="height:10px"></div>
-    <button id="signin">Sign in / up</button>
-    <div class="muted" style="margin-top:6px">Use the same account on the runner. (Disable "Confirm email" in Supabase Auth for the POC.)</div>
-    <div id="auth-msg" class="muted" style="margin-top:6px"></div>
-  </div>
+  <section id="auth" class="auth hide">
+    <div class="eyebrow">Distributed booking</div>
+    <h1>Welcome back</h1>
+    <p>Sign in — your phone does the booking, this app drives it.</p>
+    <input id="email" type="email" placeholder="email" autocomplete="username">
+    <input id="pass" type="password" placeholder="password" autocomplete="current-password">
+    <button class="go" id="signin">Sign in</button>
+    <div class="install-tip" id="authmsg"></div>
+  </section>
 
   <!-- APP -->
-  <div id="app" class="hide">
-    <div class="card">
-      <h2>Devices <span id="dev-count" class="muted"></span></h2>
-      <div id="devices"></div>
-      <div class="muted" style="margin-top:6px">Online = heartbeat within ~60s. Install the runner userscript on each device and open the Dotgolf page.</div>
+  <section id="app" class="hide">
+    <div style="padding-top:14px">
+      <div class="eyebrow">Auto booking</div>
+      <h1 class="title">Grab a tee time</h1>
+      <p class="sub">Set what you want. Your phone finds the first slot that fits and books it.</p>
     </div>
 
     <div class="card">
-      <h2>Dispatch a command</h2>
-      <label>Target</label>
-      <select id="target"></select>
-      <label>Verb</label>
-      <select id="verb">
-        <option value="ping">ping — liveness</option>
-        <option value="readAvailability">readAvailability — parse current tee sheet</option>
-        <option value="readFriends">readFriends — read friends combo</option>
-      </select>
-      <div id="args" class="row hide">
-        <div><label>From (HH:MM)</label><input id="from" placeholder="06:00"></div>
-        <div><label>To (HH:MM)</label><input id="to" placeholder="11:00"></div>
+      <h3><svg class="ic" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="17" rx="2" stroke="currentColor" stroke-width="2"/><path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>When</h3>
+      <label class="fld">Play date</label>
+      <input id="date" type="date">
+      <div class="row" style="margin-top:14px">
+        <div><label class="fld">From</label><input id="from" type="time" value="06:00"></div>
+        <div><label class="fld">Until</label><input id="to" type="time" value="11:00"></div>
       </div>
-      <div style="height:10px"></div>
-      <button id="dispatch">Dispatch</button>
-      <button id="signout" class="secondary" style="margin-top:8px">Sign out</button>
     </div>
 
     <div class="card">
-      <h2>Live results</h2>
-      <div id="results"><div class="muted">No commands yet.</div></div>
+      <h3><svg class="ic" viewBox="0 0 24 24" fill="none"><path d="M12 3v18M3 12h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>What</h3>
+      <label class="fld">Tee</label>
+      <div class="seg" id="tee">
+        <button data-v="any" class="on">Any</button><button data-v="1">Tee 1</button><button data-v="10">Tee 10</button>
+      </div>
+      <label class="fld" style="margin-top:14px">Holes</label>
+      <div class="seg" id="holes">
+        <button data-v="any" class="on">Any</button><button data-v="18">18</button><button data-v="9">9</button>
+      </div>
     </div>
-  </div>
 
+    <div class="card">
+      <h3><svg class="ic" viewBox="0 0 24 24" fill="none"><rect x="5" y="2" width="14" height="20" rx="3" stroke="currentColor" stroke-width="2"/><path d="M11 18h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Book using</h3>
+      <div id="devices"></div>
+      <div class="live-toggle">
+        <div class="lbl" id="livelbl">Dry run — finds the slot, <b>doesn't book</b></div>
+        <div class="sw" id="liveSw"><i></i></div>
+      </div>
+    </div>
+
+    <button class="go" id="go" disabled>Find my slot</button>
+
+    <div class="status" id="status"></div>
+
+    <p class="muted" style="text-align:center;margin:22px 0 30px">Books a single spot for you. Live mode reserves & submits on your account.</p>
+  </section>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-  const SUPABASE_URL = 'https://albhfwnugnmrrzbhnzry.supabase.co';
-  const SUPABASE_KEY = 'sb_publishable_CWKfQyi9o-9Gph5H24QxAw_Gzv0ZZKi';
-  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, storageKey: 'dex_shell_auth' } });
-
-  const $ = (s) => document.querySelector(s);
-  let session = null, devices = [], cmds = {};
+  const SUPABASE_URL='https://albhfwnugnmrrzbhnzry.supabase.co';
+  const SUPABASE_KEY='sb_publishable_CWKfQyi9o-9Gph5H24QxAw_Gzv0ZZKi';
+  const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,storageKey:'dex_shell_auth'}});
+  const $=s=>document.querySelector(s);
+  let session=null, devices=[], selDevice=null, live=false, watchId=null;
 
   // ---- auth ----
-  $('#signin').onclick = async () => {
-    const email = $('#email').value.trim(), pass = $('#pass').value;
-    if (!email || !pass) return msg('Enter email + password');
-    msg('Signing in…');
-    let { error } = await sb.auth.signInWithPassword({ email, password: pass });
-    if (error) { const r = await sb.auth.signUp({ email, password: pass }); if (r.error) return msg('Auth failed: ' + r.error.message); }
+  $('#signin').onclick=async()=>{
+    const email=$('#email').value.trim(), pass=$('#pass').value;
+    if(!email||!pass){$('#authmsg').textContent='Enter email + password';return;}
+    $('#authmsg').textContent='Signing in…';
+    let {error}=await sb.auth.signInWithPassword({email,password:pass});
+    if(error){const r=await sb.auth.signUp({email,password:pass});if(r.error){$('#authmsg').textContent='Auth failed: '+r.error.message;return;}}
     boot();
   };
-  $('#signout').onclick = async () => { await sb.auth.signOut(); location.reload(); };
-  const msg = (t) => $('#auth-msg').textContent = t;
 
-  // ---- verb arg visibility ----
-  $('#verb').onchange = () => { $('#args').classList.toggle('hide', $('#verb').value !== 'readAvailability'); };
+  // ---- segmented controls ----
+  function seg(id){const el=$(id);el.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;[...el.children].forEach(c=>c.classList.remove('on'));b.classList.add('on');});}
+  function segVal(id){return $(id).querySelector('button.on').dataset.v;}
+  seg('#tee');seg('#holes');
 
-  // ---- devices ----
-  async function loadDevices() {
-    const { data } = await sb.from('de_devices').select('*').order('created_at');
-    devices = data || [];
-    renderDevices();
-  }
-  function isOnline(d) { return d.online && d.last_seen && (Date.now() - new Date(d.last_seen).getTime() < 60000); }
-  function renderDevices() {
-    const box = $('#devices');
-    $('#dev-count').textContent = '(' + devices.length + ')';
-    box.innerHTML = devices.length ? devices.map(d =>
-      `<div class="dev"><span class="dot ${isOnline(d) ? 'on' : ''}"></span><b>${esc(d.label)}</b>
-       <span class="muted">${isOnline(d) ? 'online' : 'offline'} · ${d.last_seen ? timeago(d.last_seen) : 'never'}</span></div>`
-    ).join('') : '<div class="muted">No devices registered yet.</div>';
-    const t = $('#target'); const cur = t.value;
-    t.innerHTML = '<option value="all">All devices</option>' +
-      devices.map(d => `<option value="${d.id}">${esc(d.label)}${isOnline(d) ? '' : ' (offline)'}</option>`).join('');
-    if (cur) t.value = cur;
-  }
-
-  // ---- dispatch ----
-  $('#dispatch').onclick = async () => {
-    const verb = $('#verb').value;
-    const args = {};
-    if (verb === 'readAvailability') { if ($('#from').value) args.from = $('#from').value; if ($('#to').value) args.to = $('#to').value; }
-    const target = $('#target').value;
-    const targets = target === 'all' ? devices.map(d => d.id) : [target];
-    if (!targets.length) return;
-    const rows = targets.map(device_id => ({ user_id: session.user.id, device_id, verb, args }));
-    const { error } = await sb.from('de_commands').insert(rows);
-    if (error) alert('Dispatch failed: ' + error.message);
+  // ---- live toggle ----
+  $('#liveSw').onclick=()=>{
+    live=!live; $('#liveSw').classList.toggle('on',live);
+    $('#livelbl').innerHTML = live ? 'Live — <b>books for real</b> on your account' : 'Dry run — finds the slot, <b>doesn\'t book</b>';
+    syncGo();
   };
 
-  // ---- results ----
-  async function loadResults() {
-    const { data } = await sb.from('de_commands').select('*').order('created_at', { ascending: false }).limit(25);
-    cmds = {}; (data || []).forEach(c => cmds[c.id] = c); renderResults();
+  // ---- devices ----
+  const isOnline=d=>d.online&&d.last_seen&&(Date.now()-new Date(d.last_seen).getTime()<60000);
+  async function loadDevices(){
+    const {data}=await sb.from('de_devices').select('*').order('created_at');
+    devices=data||[];
+    if(selDevice&&!devices.find(d=>d.id===selDevice))selDevice=null;
+    if(!selDevice){const on=devices.find(isOnline);if(on)selDevice=on.id;}
+    renderDevices();
   }
-  function renderResults() {
-    const list = Object.values(cmds).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    const box = $('#results');
-    box.innerHTML = list.length ? list.map(c => {
-      const dev = devices.find(d => d.id === c.device_id);
-      const ms = c.result && c.result._ms != null ? ` · ${c.result._ms}ms` : '';
-      const body = c.status === 'done' ? `<pre>${esc(JSON.stringify(c.result, null, 2))}</pre>`
-        : c.status === 'error' ? `<pre>${esc(c.error || '')}</pre>` : '';
-      return `<div class="cmd"><span class="badge b-${c.status}">${c.status}</span>
-        <b>${esc(c.verb)}</b> <span class="muted">→ ${esc(dev ? dev.label : c.device_id.slice(0,8))}${ms}</span>${body}</div>`;
-    }).join('') : '<div class="muted">No commands yet.</div>';
+  function renderDevices(){
+    const box=$('#devices');
+    if(!devices.length){box.innerHTML='<p class="muted">No devices yet. Install the runner on your phone and open the Dotgolf page.</p>';syncGo();return;}
+    box.innerHTML=devices.map(d=>{
+      const on=isOnline(d);
+      return `<div class="dev ${selDevice===d.id?'sel':''}" data-id="${d.id}">
+        <span class="led ${on?'on':''}"></span><span class="nm">${esc(d.label)}</span>
+        <span class="st">${on?'online':'offline'}</span></div>`;
+    }).join('');
+    box.querySelectorAll('.dev').forEach(el=>el.onclick=()=>{selDevice=el.dataset.id;renderDevices();});
+    syncGo();
+  }
+  function syncGo(){
+    const ok=selDevice&&devices.find(d=>d.id===selDevice&&isOnline(d));
+    const btn=$('#go'); btn.disabled=!ok;
+    btn.textContent=live?'Book my slot':'Find my slot';
+    btn.classList.toggle('live',live);
   }
 
-  // ---- realtime ----
-  function subscribe() {
-    sb.channel('shell-devices').on('postgres_changes', { event: '*', schema: 'public', table: 'de_devices' },
-      () => loadDevices()).subscribe();
-    sb.channel('shell-cmds').on('postgres_changes', { event: '*', schema: 'public', table: 'de_commands' },
-      (p) => { const c = p.new || p.old; if (c) { cmds[c.id] = p.new || cmds[c.id]; renderResults(); } }).subscribe();
-    // refresh device online/offline staleness every 20s
-    setInterval(renderDevices, 20000);
-  }
+  // ---- dispatch booking ----
+  $('#go').onclick=async()=>{
+    if(!selDevice)return;
+    const args={date:$('#date').value,from:$('#from').value,to:$('#to').value,tee:segVal('#tee'),holes:segVal('#holes'),mode:live?'live':'dry'};
+    if(!args.date){alert('Pick a play date');return;}
+    if(live&&!confirm('LIVE: this will reserve and book a single spot on your account for '+args.date+'. Continue?'))return;
+    $('#go').disabled=true;
+    showStage('Sending to your phone…');
+    const {data,error}=await sb.from('de_commands').insert({user_id:session.user.id,device_id:selDevice,verb:'makeBooking',args}).select().single();
+    if(error){showResult('err','Dispatch failed',error.message);$('#go').disabled=false;return;}
+    watchCommand(data.id);
+  };
 
-  // ---- helpers ----
-  const esc = (s) => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-  function timeago(iso) { const s = (Date.now() - new Date(iso).getTime()) / 1000; return s < 60 ? Math.round(s) + 's ago' : s < 3600 ? Math.round(s / 60) + 'm ago' : Math.round(s / 3600) + 'h ago'; }
+  function watchCommand(id){
+    if(watchId)sb.removeChannel(watchId);
+    watchId=sb.channel('cmd-'+id)
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'de_commands',filter:'id=eq.'+id},p=>renderCmd(p.new))
+      .subscribe();
+    // also poll once in case we missed the first update
+    setTimeout(async()=>{const {data}=await sb.from('de_commands').select('*').eq('id',id).single();if(data)renderCmd(data);},1200);
+  }
+  function renderCmd(c){
+    if(c.status==='queued'||c.status==='running'){
+      const stage=(c.result&&c.result.stage)||'Working…';
+      showStage(stage);
+    }else if(c.status==='done'){
+      const r=c.result||{};
+      if(r.dry){showResult('ok','Found a slot (dry run)',`<div class="slot">${esc(r.time||'')} · Tee ${esc(r.tee||'')}</div><div class="muted">${esc((r.categories||[]).join(', '))}</div><div class="muted" style="margin-top:8px">Flip Live on to book it.</div>`);}
+      else{showResult('ok','Booked ✓',`<div class="slot">${esc(r.time||'')} · Tee ${esc(r.tee||'')}</div><div class="muted">${esc(r.note||'Booked a single spot.')}</div>`);}
+      $('#go').disabled=false;syncGo();
+    }else if(c.status==='error'){
+      showResult('err','Couldn’t complete',c.error||'Unknown error');
+      $('#go').disabled=false;syncGo();
+    }
+  }
+  function showStage(t){$('#status').innerHTML=`<div class="stage"><span class="spin"></span>${esc(t)}</div>`;}
+  function showResult(kind,title,html){$('#status').innerHTML=`<div class="result ${kind}"><h4>${esc(title)}</h4>${html}</div>`;}
+
+  // ---- realtime devices ----
+  function subscribe(){
+    sb.channel('shell-dev').on('postgres_changes',{event:'*',schema:'public',table:'de_devices'},()=>loadDevices()).subscribe();
+    setInterval(renderDevices,20000);
+  }
+  const esc=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
   // ---- boot ----
-  async function boot() {
-    const { data } = await sb.auth.getSession();
-    session = data.session;
-    if (!session) { $('#app').classList.add('hide'); $('#auth-card').classList.remove('hide'); return; }
-    $('#auth-card').classList.add('hide'); $('#app').classList.remove('hide');
-    $('#who').textContent = session.user.email || session.user.id.slice(0, 8);
-    await loadDevices(); await loadResults(); subscribe();
+  async function boot(){
+    const {data}=await sb.auth.getSession();session=data.session;
+    if(!session){$('#app').classList.add('hide');$('#auth').classList.remove('hide');return;}
+    $('#auth').classList.add('hide');$('#app').classList.remove('hide');
+    $('#who').innerHTML=`${esc(session.user.email||'signed in')} · <button id="out">sign out</button>`;
+    $('#out').onclick=async()=>{await sb.auth.signOut();location.reload();};
+    if(!$('#date').value){const d=new Date();d.setDate(d.getDate()+1);$('#date').value=d.toISOString().slice(0,10);}
+    await loadDevices();subscribe();
   }
-  sb.auth.onAuthStateChange((_e, s) => { session = s; });
+  sb.auth.onAuthStateChange((_e,s)=>{session=s;});
   boot();
+  if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
 </script>
 </body>
 </html>
