@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DEX Shell — Distributed Execution POC</title>
+<style>
+  :root { color-scheme: light dark; --bg:#0b1220; --card:#131c2e; --line:#26334d; --accent:#2563eb; --ok:#1e7e34; --warn:#b8860b; --err:#c0392b; }
+  * { box-sizing: border-box; }
+  body { font:15px/1.45 system-ui,sans-serif; margin:0; background:var(--bg); color:#e8edf6; }
+  header { background:var(--accent); color:#fff; padding:14px 16px; font-weight:700; display:flex; justify-content:space-between; align-items:center; }
+  header small { opacity:.8; font-weight:400; }
+  main { max-width:760px; margin:0 auto; padding:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin:14px 0; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; opacity:.7; margin:0 0 10px; }
+  label { display:block; font-size:13px; margin:8px 0 2px; opacity:.85; }
+  input, select, button { font:inherit; padding:9px 10px; border-radius:8px; border:1px solid var(--line); background:#0e1626; color:#e8edf6; width:100%; }
+  button { background:var(--accent); border:0; color:#fff; font-weight:700; cursor:pointer; }
+  button.secondary { background:#26334d; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; }
+  .row > * { flex:1; min-width:120px; }
+  .dev { display:flex; align-items:center; gap:8px; padding:8px 0; border-top:1px solid var(--line); }
+  .dot { width:10px; height:10px; border-radius:50%; background:#666; flex:none; }
+  .dot.on { background:var(--ok); box-shadow:0 0 8px var(--ok); }
+  .badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:700; }
+  .b-queued{background:#3b3b3b;color:#fff} .b-running{background:var(--warn);color:#fff} .b-done{background:var(--ok);color:#fff} .b-error{background:var(--err);color:#fff}
+  .cmd { border-top:1px solid var(--line); padding:8px 0; }
+  pre { background:#0a1120; border-radius:8px; padding:8px; overflow:auto; font-size:12px; margin:6px 0 0; white-space:pre-wrap; word-break:break-word; }
+  .muted { opacity:.6; font-size:12px; }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+<header><span>DEX Shell <small>distributed execution</small></span><span id="who" class="muted"></span></header>
+<main>
+
+  <!-- AUTH -->
+  <div class="card" id="auth-card">
+    <h2>Sign in</h2>
+    <label>Email</label><input id="email" type="email" autocomplete="username">
+    <label>Password</label><input id="pass" type="password" autocomplete="current-password">
+    <div style="height:10px"></div>
+    <button id="signin">Sign in / up</button>
+    <div class="muted" style="margin-top:6px">Use the same account on the runner. (Disable "Confirm email" in Supabase Auth for the POC.)</div>
+    <div id="auth-msg" class="muted" style="margin-top:6px"></div>
+  </div>
+
+  <!-- APP -->
+  <div id="app" class="hide">
+    <div class="card">
+      <h2>Devices <span id="dev-count" class="muted"></span></h2>
+      <div id="devices"></div>
+      <div class="muted" style="margin-top:6px">Online = heartbeat within ~60s. Install the runner userscript on each device and open the Dotgolf page.</div>
+    </div>
+
+    <div class="card">
+      <h2>Dispatch a command</h2>
+      <label>Target</label>
+      <select id="target"></select>
+      <label>Verb</label>
+      <select id="verb">
+        <option value="ping">ping — liveness</option>
+        <option value="readAvailability">readAvailability — parse current tee sheet</option>
+        <option value="readFriends">readFriends — read friends combo</option>
+      </select>
+      <div id="args" class="row hide">
+        <div><label>From (HH:MM)</label><input id="from" placeholder="06:00"></div>
+        <div><label>To (HH:MM)</label><input id="to" placeholder="11:00"></div>
+      </div>
+      <div style="height:10px"></div>
+      <button id="dispatch">Dispatch</button>
+      <button id="signout" class="secondary" style="margin-top:8px">Sign out</button>
+    </div>
+
+    <div class="card">
+      <h2>Live results</h2>
+      <div id="results"><div class="muted">No commands yet.</div></div>
+    </div>
+  </div>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const SUPABASE_URL = 'https://albhfwnugnmrrzbhnzry.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_CWKfQyi9o-9Gph5H24QxAw_Gzv0ZZKi';
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, storageKey: 'dex_shell_auth' } });
+
+  const $ = (s) => document.querySelector(s);
+  let session = null, devices = [], cmds = {};
+
+  // ---- auth ----
+  $('#signin').onclick = async () => {
+    const email = $('#email').value.trim(), pass = $('#pass').value;
+    if (!email || !pass) return msg('Enter email + password');
+    msg('Signing in…');
+    let { error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if (error) { const r = await sb.auth.signUp({ email, password: pass }); if (r.error) return msg('Auth failed: ' + r.error.message); }
+    boot();
+  };
+  $('#signout').onclick = async () => { await sb.auth.signOut(); location.reload(); };
+  const msg = (t) => $('#auth-msg').textContent = t;
+
+  // ---- verb arg visibility ----
+  $('#verb').onchange = () => { $('#args').classList.toggle('hide', $('#verb').value !== 'readAvailability'); };
+
+  // ---- devices ----
+  async function loadDevices() {
+    const { data } = await sb.from('de_devices').select('*').order('created_at');
+    devices = data || [];
+    renderDevices();
+  }
+  function isOnline(d) { return d.online && d.last_seen && (Date.now() - new Date(d.last_seen).getTime() < 60000); }
+  function renderDevices() {
+    const box = $('#devices');
+    $('#dev-count').textContent = '(' + devices.length + ')';
+    box.innerHTML = devices.length ? devices.map(d =>
+      `<div class="dev"><span class="dot ${isOnline(d) ? 'on' : ''}"></span><b>${esc(d.label)}</b>
+       <span class="muted">${isOnline(d) ? 'online' : 'offline'} · ${d.last_seen ? timeago(d.last_seen) : 'never'}</span></div>`
+    ).join('') : '<div class="muted">No devices registered yet.</div>';
+    const t = $('#target'); const cur = t.value;
+    t.innerHTML = '<option value="all">All devices</option>' +
+      devices.map(d => `<option value="${d.id}">${esc(d.label)}${isOnline(d) ? '' : ' (offline)'}</option>`).join('');
+    if (cur) t.value = cur;
+  }
+
+  // ---- dispatch ----
+  $('#dispatch').onclick = async () => {
+    const verb = $('#verb').value;
+    const args = {};
+    if (verb === 'readAvailability') { if ($('#from').value) args.from = $('#from').value; if ($('#to').value) args.to = $('#to').value; }
+    const target = $('#target').value;
+    const targets = target === 'all' ? devices.map(d => d.id) : [target];
+    if (!targets.length) return;
+    const rows = targets.map(device_id => ({ user_id: session.user.id, device_id, verb, args }));
+    const { error } = await sb.from('de_commands').insert(rows);
+    if (error) alert('Dispatch failed: ' + error.message);
+  };
+
+  // ---- results ----
+  async function loadResults() {
+    const { data } = await sb.from('de_commands').select('*').order('created_at', { ascending: false }).limit(25);
+    cmds = {}; (data || []).forEach(c => cmds[c.id] = c); renderResults();
+  }
+  function renderResults() {
+    const list = Object.values(cmds).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const box = $('#results');
+    box.innerHTML = list.length ? list.map(c => {
+      const dev = devices.find(d => d.id === c.device_id);
+      const ms = c.result && c.result._ms != null ? ` · ${c.result._ms}ms` : '';
+      const body = c.status === 'done' ? `<pre>${esc(JSON.stringify(c.result, null, 2))}</pre>`
+        : c.status === 'error' ? `<pre>${esc(c.error || '')}</pre>` : '';
+      return `<div class="cmd"><span class="badge b-${c.status}">${c.status}</span>
+        <b>${esc(c.verb)}</b> <span class="muted">→ ${esc(dev ? dev.label : c.device_id.slice(0,8))}${ms}</span>${body}</div>`;
+    }).join('') : '<div class="muted">No commands yet.</div>';
+  }
+
+  // ---- realtime ----
+  function subscribe() {
+    sb.channel('shell-devices').on('postgres_changes', { event: '*', schema: 'public', table: 'de_devices' },
+      () => loadDevices()).subscribe();
+    sb.channel('shell-cmds').on('postgres_changes', { event: '*', schema: 'public', table: 'de_commands' },
+      (p) => { const c = p.new || p.old; if (c) { cmds[c.id] = p.new || cmds[c.id]; renderResults(); } }).subscribe();
+    // refresh device online/offline staleness every 20s
+    setInterval(renderDevices, 20000);
+  }
+
+  // ---- helpers ----
+  const esc = (s) => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  function timeago(iso) { const s = (Date.now() - new Date(iso).getTime()) / 1000; return s < 60 ? Math.round(s) + 's ago' : s < 3600 ? Math.round(s / 60) + 'm ago' : Math.round(s / 3600) + 'h ago'; }
+
+  // ---- boot ----
+  async function boot() {
+    const { data } = await sb.auth.getSession();
+    session = data.session;
+    if (!session) { $('#app').classList.add('hide'); $('#auth-card').classList.remove('hide'); return; }
+    $('#auth-card').classList.add('hide'); $('#app').classList.remove('hide');
+    $('#who').textContent = session.user.email || session.user.id.slice(0, 8);
+    await loadDevices(); await loadResults(); subscribe();
+  }
+  sb.auth.onAuthStateChange((_e, s) => { session = s; });
+  boot();
+</script>
+</body>
+</html>
